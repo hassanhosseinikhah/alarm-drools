@@ -1,0 +1,175 @@
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 160000000
+        readTimeout: 160000000
+
+variables:
+  inactiveTicketStates:
+    - 1004
+    - 2025
+  fluctuationCauses:
+    - 'RAN:SITE FLUCTUATING(2G_3G_4G)'
+    - 'RAN:CELL FLUCTUATING (2G_3G_4G)'
+  relatedCauseMap:
+    '[RAN:SITE DOWN (2G_3G_4G)]':
+      - 'RAN:SITE DOWN (2G_3G_4G)'
+      - 'RAN:SITE FLUCTUATING(2G_3G_4G)'
+    '[RAN:CELL DOWN(2G_3G_4G)]':
+      - 'RAN:SITE DOWN (2G_3G_4G)'
+      - 'RAN:SITE FLUCTUATING(2G_3G_4G)'
+      - 'RAN:CELL DOWN(2G_3G_4G)'
+      - 'RAN:CELL FLUCTUATING (2G_3G_4G)'
+    'all':
+      - 'RAN:SITE DOWN (2G_3G_4G)'
+      - 'RAN:SITE FLUCTUATING(2G_3G_4G)'
+      - 'RAN:CELL DOWN(2G_3G_4G)'
+      - 'RAN:CELL FLUCTUATING (2G_3G_4G)'
+  fluLinkAllowed: 10800000
+  fluCreateJobTicketAllowed: 43200000
+  downTicketCreateJobTicketAllowed: 3600000
+  fluUpdateAllowed: 3600000
+  fluCreateAllowed: 120000
+  levelCreate: 120000
+  downLinkAllowed: 31536000000
+  downUpdateAllowed: 3600000
+  fluctuatingTicketDuration: 86400000
+  siteDownAlarmDuration: 540000
+  cellDownAlarmDuration: 600000
+  cellToSiteAllowed: 3600000
+  ticketReportedOffset: 600000
+  alarmActionBatchSize: 15
+  ticketWorkGroup: A
+  ticketType: NETWORK_FAULT
+  ticketEntity: RAN
+  ticketImpact: LEVEL4
+  radioRuleId: 3
+  band900:
+    - '1G'
+    - '4G'
+    - '7G'
+  additionalDownCauses:
+    - 'NI:NI SITE'
+    - 'NI:SITE CELL DOWN'
+    - 'NI:SITE CELL LOCKED'
+    - 'RAN:PE'
+  NICause:
+    - 'NI:NI SITE'
+  NIComment: 'This Fault has NI Ticket  (Ticket Number : %s ). This is an automatically generated comment.'
+  noJobTicketDescription: 'NoJobTicket'
+  jobTicketComment: 'Due to a change in ticket cause, A new JobTicket has been generated. Please follow JobTicket Id %s. This is an automatically generated comment.'
+  relatedAlarmDuration: 120000
+  linkAlarmDuration: 3600000
+  alarmOnTimeForRebuildFluCache: 3600000
+  fluMinDuration: 59000
+  fluMinDownTime: 360000
+  userName: AUTOMATION
+  jobCreator: AUTOMATION
+  userId: 7c8fd0c705
+  creatorWorkGroup: MBB_FO_RAN
+  inventoryRefreshInterval: 3600000
+  getInventoryRefreshInterval: 600000
+  fluToDownCheckInterval: 1210000
+  eventRefreshInterval: 60000
+  eventProcessorThreads: 10
+  jobTicketDelay: 5000
+  contractorToFSMGroup:
+    '[TEAM TELECOM]': 'FSM_TEAMTELECOM'
+    'ICON': 'TEH_FSM_SAM'
+    'FARHIKHTEGAN': 'FSM_FARHIKHTEGAN_WG'
+    'PORSOO': 'FSM_PORSOO'
+    'MEDIA': 'FSM_MEDIA'
+    '[PORSOO SUB]': 'FSM_PORSOO_SUB'
+  impactsIgnoringAttributeUpdate: 'LEVEL2,LEVEL1'
+  filterSeparator: " "
+  filterTypeDisplayName:
+    BSC: 'BSC'
+    RNC: 'RNC'
+    LTEParent: 'LTEParent'
+    PROVINCE: 'Province'
+    VENDOR_PROVINCE: 'Vendor Per Province'
+  cacheUpdateLevel4: 3600000
+  headRangeOfLevel4CacheQuery: 30
+  headRangeOfOldLevel4CacheQuery: 30
+  endRangeOfLevel4CacheQuery: 365
+  cacheUpdateOldLevel4: 86400000
+  provinceInCacheQuery:
+    - 'ALL'
+
+
+
+query:
+  whereCondition: WHERE_CONDITION
+  queryParam1: QUERY_PARAM_1
+  queryParam2: QUERY_PARAM_2
+  queryParam3: QUERY_PARAM_3
+  alarmBaseQuery: >
+    SELECT a.*, s.*
+    FROM alarms a, alarm_states s, areas ar, locations l
+    WHERE a.alam_id = s.alas_alam_id
+      AND s.alas_acknowledged IS NULL
+      AND s.alas_reported > sysdate -1/24
+      AND s.alas_reported > TO_DATE('${parameters.alarms-on-time}', 'YYYY/MM/DD HH24:MI:SS')
+      AND a.alam_locn_ttname = l.locn_ttname
+      AND l.locn_area_code = ar.area_code
+      AND ar.area_area_code ${parameters.province}
+      AND QUERY_PARAM_1
+    ORDER BY s.ALAS_REPORTED
+  alarmRadioQuery: >
+    SELECT a.*, s.*
+    FROM alarms a, alarm_states s, alarm_state_fields asf , areas ar, locations l
+    WHERE a.alam_id = s.alas_alam_id
+      AND s.alas_acknowledged IS NULL
+      AND s.alas_reported > sysdate -1/24
+      AND s.alas_reported > TO_DATE('${parameters.alarms-on-time}', 'YYYY/MM/DD HH24:MI:SS')
+      And s.alas_occurrenceid = asf.alsf_alas_occurrenceid
+      AND a.alam_locn_ttname = l.locn_ttname
+      AND l.locn_area_code = ar.area_code
+      AND ar.area_area_code ${parameters.province}
+      AND QUERY_PARAM_1
+      AND ASF.ALSF_ALFI_NAME = 'addField1'
+    ORDER BY s.ALAS_REPORTED
+  alarmBaseQueryForFirstIteration: >
+    SELECT a.*, s.*
+    FROM alarms a, alarm_states s, areas ar, locations l
+    WHERE a.alam_id = s.alas_alam_id
+      AND s.alas_acknowledged IS NULL
+      AND s.alas_reported >= trunc(sysdate)
+      AND s.alas_reported > TO_DATE('${parameters.alarms-on-time}', 'YYYY/MM/DD HH24:MI:SS')
+      AND a.alam_locn_ttname = l.locn_ttname
+      AND l.locn_area_code = ar.area_code
+      AND ar.area_area_code ${parameters.province}
+      AND QUERY_PARAM_1
+    ORDER BY s.ALAS_REPORTED
+  relatedAlarmBaseQuery: >
+    SELECT ra.*, rs.*
+    FROM alarms ra, alarm_states rs, alarms a, areas ar, locations l
+    WHERE ra.alam_id = rs.alas_alam_id
+      AND rs.alas_acknowledged IS NULL
+      AND rs.alas_cleared IS NULL
+      AND ra.alam_active = 'Y'
+      AND rs.alas_reported > sysdate -1
+      AND a.alam_id = QUERY_PARAM_2
+      AND rs.alas_reported > TO_DATE('${parameters.alarms-on-time}', 'YYYY/MM/DD HH24:MI:SS')
+      AND a.alam_locn_ttname = l.locn_ttname
+      AND l.locn_area_code = ar.area_code
+      AND ar.area_area_code ${parameters.province}
+      AND QUERY_PARAM_1
+  fluAlarmBaseQuery: >
+    SELECT p.prom_number ALAM_PROCESSINGTYPE, a.*, s.*
+    FROM alarms a, alarm_states s, complex_rule_history h, problems p, problem_links pl
+    WHERE h.crhi_prom_number = p.prom_number
+        AND p.prom_cause IN ('RAN:SITE FLUCTUATING(2G_3G_4G)','RAN:CELL FLUCTUATING (2G_3G_4G)')
+        AND p.prom_pros_code NOT IN (1004, 2025)
+        AND p.prom_reported > sysdate - 12 / 24
+        AND p.prom_number = pl.prol_prom_number
+        AND pl.prol_foreigntype = 'ALARMS'
+        AND pl.prol_foreignid = s.alas_occurrenceid
+        AND s.alas_alam_id = a.alam_id
+        AND ((s.alas_cleared IS NULL AND s.alas_reported < sysdate - 1/24) OR (s.alas_cleared IS NOT NULL AND s.alas_cleared - s.alas_reported > 1/24))
+        AND QUERY_PARAM_1
+    ORDER BY
+        s.alas_reported
+
+
