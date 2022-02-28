@@ -14,15 +14,7 @@ import org.kie.api.runtime.conf.ClockTypeOption;
 import org.kie.internal.io.ResourceFactory;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.transaction.annotation.EnableTransactionManagement;
 
-@Configuration
-@EnableTransactionManagement
-@Primary
-@EnableAsync
 @SpringBootConfiguration
 public class DroolsConfiguration {
 
@@ -31,7 +23,7 @@ public class DroolsConfiguration {
     @Bean
     public KieSession getKieContainer() {
         KieFileSystem kieFileSystem = kieServices.newKieFileSystem();
-        kieFileSystem.write(ResourceFactory.newClassPathResource("rules/rules.xlsx"));
+        kieFileSystem.write(ResourceFactory.newClassPathResource("rules.xlsx"));
         KieBuilder kb = kieServices.newKieBuilder(kieFileSystem);
         kb.buildAll();
         KieModule kieModule = kb.getKieModule();

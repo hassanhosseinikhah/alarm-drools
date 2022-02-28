@@ -171,5 +171,3 @@ query:
         AND QUERY_PARAM_1
     ORDER BY
         s.alas_reported
-
-

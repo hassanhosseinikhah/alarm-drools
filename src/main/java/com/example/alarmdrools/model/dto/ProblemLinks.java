@@ -1,10 +1,8 @@
 package com.example.alarmdrools.model.dto;
 
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import javax.persistence.*;
 
@@ -40,9 +38,10 @@ public class ProblemLinks {
 //        this.foreignParent = linkDTO.getForeignParent();
 //    }
 
-    public ProblemLinks(){
 
+    public ProblemLinks() {
     }
+
     public ProblemLinks(String foreignId, String foreignType) {
         this.foreignId = foreignId;
         this.foreignType = foreignType;

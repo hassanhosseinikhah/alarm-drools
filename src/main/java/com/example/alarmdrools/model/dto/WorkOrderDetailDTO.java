@@ -4,7 +4,6 @@ package com.example.alarmdrools.model.dto;
 import com.example.alarmdrools.enums.ParkColor;
 import com.example.alarmdrools.enums.WorkOrderType;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
 import java.util.Date;
 

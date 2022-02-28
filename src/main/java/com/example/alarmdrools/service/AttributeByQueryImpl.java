@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
@@ -20,7 +21,7 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
-@Slf4j
+
 public class AttributeByQueryImpl implements AttributeStrategy {
 
 
@@ -51,11 +52,11 @@ public class AttributeByQueryImpl implements AttributeStrategy {
                 .replace(queryParam3, ticketParams.getSiteId());
         String result = null;
         try {
-            log.info("Attribute {} query: {}", ruleAttribute.getName(), query);
+//            log.info("Attribute {} query: {}", ruleAttribute.getName(), query);
             result = String.valueOf(entityManager.createNativeQuery(query).getSingleResult());
         } catch (NoResultException ex) {
-            log.error("Error while getting attribute value, Category: '{}' name: '{}'; message: {}",
-                    ruleAttribute.getCategory(), ruleAttribute.getName(), ex.getMessage());
+//            log.error("Error while getting attribute value, Category: '{}' name: '{}'; message: {}",
+//                    ruleAttribute.getCategory(), ruleAttribute.getName(), ex.getMessage());
         }
         return createDTO(ruleAttribute, result);
     }

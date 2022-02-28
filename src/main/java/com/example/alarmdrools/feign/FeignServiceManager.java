@@ -9,8 +9,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.util.concurrent.CompletableFuture;
-
 @Component
 @FeignClient(value = "service-manager")
 public interface FeignServiceManager {

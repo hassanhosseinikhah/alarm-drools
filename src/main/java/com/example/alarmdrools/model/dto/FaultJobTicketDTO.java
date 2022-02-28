@@ -27,7 +27,7 @@ public class FaultJobTicketDTO {
     private Date proposedStartDate;
     private Date proposedFinishDate;
 
-    public FaultJobTicketDTO(){
+    public FaultJobTicketDTO() {
     }
 
     public FaultJobTicketDTO(@NotNull(message = "JOB Work Group is Required") String fsmWorkGroup, @NotNull(message = "FSM Priority is Required") String fsmPriority, @NotNull(message = "FSM Customer Appointment Date is Required") Date fsmCustomerAppointmentDate, @NotNull(message = "Region is Mandatory to create a Job Ticket") String areaCode, @NotNull(message = "Customer is Required") String customer, @NotNull(message = "Description is Required") String description) {

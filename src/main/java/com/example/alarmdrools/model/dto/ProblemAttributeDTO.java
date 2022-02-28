@@ -3,20 +3,18 @@ package com.example.alarmdrools.model.dto;
 import com.example.alarmdrools.enums.DataType;
 import com.example.alarmdrools.enums.Optionality;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+
 import org.hibernate.validator.constraints.Length;
 
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 
 
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-
 public class ProblemAttributeDTO {
-
-
 
     private String pralName;
     @Length(max = 1000, message = "Max length for attribute value is 1000.")
@@ -26,8 +24,10 @@ public class ProblemAttributeDTO {
     private DataType dataType;
     private boolean hasLov = false;
 
-    public ProblemAttributeDTO(){
+
+    public ProblemAttributeDTO() {
     }
+
     public ProblemAttributeDTO(String pralName, String value, Optionality optionality, Long displayOrder, DataType dataType) {
         this.pralName = pralName;
         this.value = value;

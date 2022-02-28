@@ -11,8 +11,10 @@ import com.example.alarmdrools.model.ApplicationVariables;
 import com.example.alarmdrools.model.TripleString;
 import com.example.alarmdrools.model.dto.*;
 import com.example.alarmdrools.model.entity.AlarmComments;
+import com.example.alarmdrools.model.entity.AlarmStates;
 import com.example.alarmdrools.model.entity.RuleAttribute;
 import com.example.alarmdrools.repository.AlarmRepository;
+import com.example.alarmdrools.repository.AlarmStatesRepository;
 import com.example.alarmdrools.repository.RuleAttributeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.kie.api.runtime.KieSession;
@@ -36,7 +38,6 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.toMap;
 
 @Service
-@Slf4j
 public class AlarmService {
 
 
@@ -52,6 +53,7 @@ public class AlarmService {
     private ApplicationVariables appVars;
     private Map<String, String> cityMap;
     private Map<String, String> siteIdToArea;
+    private  AlarmStatesRepository alarmStatesRepository;
 
 
     private static final String FSM_GROUP_QUERY = "SELECT mfwo_province c1 ,mfwo_workgroup c2 FROM mci_clarity.mci_fsm_workgroups";
@@ -70,7 +72,8 @@ public class AlarmService {
     }
 
     @Autowired
-    public AlarmService(KieSession kieSession, AttributeHelper attributeHelper, EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository, ApplicationVariables appVars, AlarmRepository alarmRepository, FeignService feignService, FeignServiceManager feignServiceManager, FeignAlarmAction feignAlarmAction) {
+    public AlarmService(KieSession kieSession, AttributeHelper attributeHelper, EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository,
+                        AlarmStatesRepository alarmStatesRepository,ApplicationVariables appVars, AlarmRepository alarmRepository, FeignService feignService, FeignServiceManager feignServiceManager, FeignAlarmAction feignAlarmAction) {
         initCityMap();
         this.kieSession = kieSession;
         this.alarmRepository = alarmRepository;
@@ -81,6 +84,7 @@ public class AlarmService {
         this.entityManager = entityManager;
         this.ruleAttributeRepository = ruleAttributeRepository;
         this.attributeHelper = attributeHelper;
+        this.alarmStatesRepository=alarmStatesRepository;
     }
 
     public List<AlarmComments> getAlarms() {
@@ -102,6 +106,8 @@ public class AlarmService {
                 counter++;
                 doAlarmAck(token, "ACK", Stream.of(alarm.getAlasOccurrenceId()).collect(Collectors.toList()), severity, comment);
 
+                AlarmStates alarmStates = alarmStatesRepository.getByAlasOccurrenceId(alarm.getAlasOccurrenceId());
+                if (alarmStates.getAlasAcknowledged()!=null){
                 if (getTechnologies(alarm.getAlamEqupIndex(), alarm.getAlamEventType(), alarm.getAlamProbableCause(), alarm.getAlasMessage()) != null) {
                     for (char c : alarm.getAction().toCharArray()) {
                         if (c == 'F') {
@@ -156,7 +162,7 @@ public class AlarmService {
                         }
                     }
                 }
-            }
+            }}
         }
             System.out.println("total processed alarms = " + counter);
             return createFaultDTOS;
@@ -196,7 +202,8 @@ public class AlarmService {
     public ActionResult doAlarmAck(String token, String type, List<String> occurrenceIds, String severity, String comment) {
         try {
             String message = feignAlarmAction.doAlarmAck(token, type, occurrenceIds, severity, comment).getMessage();
-            return new ActionResult(message);
+            ActionResult actionResult = new ActionResult(message);
+            return actionResult;
         } catch (Exception ex) {
             System.out.println(ex);
         }

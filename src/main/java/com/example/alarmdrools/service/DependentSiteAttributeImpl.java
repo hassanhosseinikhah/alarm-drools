@@ -14,7 +14,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-@Slf4j
+
 public class DependentSiteAttributeImpl implements AttributeStrategy, AttributeUpdate {
 
     private static final String ATTRIBUTE_NAME = "DEPENDENT SITE LIST";
