@@ -22,6 +22,7 @@ public class AlarmDroolsApplication {
 //    }
 
     public static void main(String[] args) {
+
         SpringApplication.run(AlarmDroolsApplication.class, args);
     }
 

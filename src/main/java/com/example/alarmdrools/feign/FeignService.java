@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 @Component
 @FeignClient(value = "fault-manager-service")
 public interface FeignService {
-    @PostMapping("/fault/create-without-attachments2")
+    @PostMapping("/fault/create-without-attachments/forAutoFault")
      CreateFaultDTO createFaultWOA(@RequestHeader(value = "Authorization") String token,
                                    @RequestBody @NotNull CreateFaultDTO createFaultDTO) throws IOException;
 
