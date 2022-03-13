@@ -1,7 +1,7 @@
 package com.example.alarmdrools.config;
 
 import com.example.alarmdrools.model.TripleString;
-import com.example.alarmdrools.model.dto.Alarm;
+import com.example.alarmdrools.model.dto.*;
 
 import javax.persistence.*;
 import javax.xml.crypto.Data;
@@ -85,6 +85,44 @@ import java.util.Date;
                                 }),
                 }
         ),
+        @SqlResultSetMapping(name = "ProblemMapping",
+                classes = {
+                        @ConstructorResult(
+                                targetClass = ProblemDTO.class,
+                                columns = {
+                                        @ColumnResult(name = "PROM_NUMBER",type = Long.class),
+                                        @ColumnResult(name = "PROM_CREATED",type = Data.class),
+                                        @ColumnResult(name = "PROM_CAUSE"),
+                                        @ColumnResult(name = "PROM_REPORTED"),
+                                        @ColumnResult(name = "ALAM_ALARMTYPE",type = Data.class),
+                                        @ColumnResult(name = "PRAT_VALUE"),
+                                }),
+                }
+        ),
+        @SqlResultSetMapping(name = "ProblemStatusMapping",
+                classes = {
+                        @ConstructorResult(
+                                targetClass = ProblemStatus.class,
+                                columns = {
+                                        @ColumnResult(name = "PROM_NUMBER",type = Long.class),
+                                        @ColumnResult(name = "PROM_PROS_CODE",type = Long.class),
+
+                                }),
+                }
+        ),
+        @SqlResultSetMapping(name = "AttributesValue",
+                classes = {
+                        @ConstructorResult(
+                                targetClass = Attributes.class,
+                                columns = {
+                                        @ColumnResult(name = "PRAT_VALUE"),
+
+
+
+                                }),
+                }
+        ),
+
 
 })
 @Entity

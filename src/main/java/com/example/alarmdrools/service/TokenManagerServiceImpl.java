@@ -1,8 +1,5 @@
 package com.example.alarmdrools.service;
 
-
-
-
 import com.clarity.cloud.common.feign.service.SsoService;
 import com.clarity.cloud.common.security.UsernamePasswordToken;
 import com.example.alarmdrools.inteface.TokenManagerService;
@@ -59,7 +56,7 @@ public class TokenManagerServiceImpl implements TokenManagerService {
             token = ssoService.tokens(userPass, "");
             return true;
         } catch (Exception ex) {
-//            log.error("Acquiring new token failed.");
+            log.error("Acquiring new token failed.");
             Thread.sleep(1000);
         }
         return false;
@@ -70,7 +67,7 @@ public class TokenManagerServiceImpl implements TokenManagerService {
             if (Boolean.TRUE.equals(ssoService.authenticate(token)))
                 return true;
         } catch (Exception ex) {
-//            log.error("Token Expired, acquiring new token.");
+            log.error("Token Expired, acquiring new token.");
         }
         return false;
     }

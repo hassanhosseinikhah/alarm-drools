@@ -5,7 +5,7 @@ import com.example.alarmdrools.feign.FeignService;
 import com.example.alarmdrools.model.dto.*;
 import com.example.alarmdrools.model.entity.AlarmComments;
 import com.example.alarmdrools.service.AlarmService;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,10 +22,15 @@ public class FixedDepositRateController {
     private final FeignService feignService;
     private final AlarmService alarmService;
 
+
+
+    @Autowired
     public FixedDepositRateController(FeignService feignService, AlarmService alarmService) {
         this.feignService = feignService;
         this.alarmService = alarmService;
     }
+
+
 
     @GetMapping("/alarms")
     public List<AlarmComments> getActiveAlarms(){

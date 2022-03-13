@@ -7,13 +7,14 @@ import com.example.alarmdrools.feign.FeignAlarmAction;
 import com.example.alarmdrools.feign.FeignService;
 import com.example.alarmdrools.feign.FeignServiceManager;
 import com.example.alarmdrools.inteface.AttributeHelper;
+import com.example.alarmdrools.map.ConvertToDTO;
 import com.example.alarmdrools.model.ApplicationVariables;
 import com.example.alarmdrools.model.TripleString;
 import com.example.alarmdrools.model.dto.*;
 import com.example.alarmdrools.model.entity.AlarmComments;
 import com.example.alarmdrools.model.entity.AlarmStates;
 import com.example.alarmdrools.model.entity.RuleAttribute;
-import com.example.alarmdrools.repository.AlarmRepository;
+import com.example.alarmdrools.repository.AlarmCoomentsRepository;
 import com.example.alarmdrools.repository.AlarmStatesRepository;
 import com.example.alarmdrools.repository.RuleAttributeRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +27,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.PostConstruct;
 import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
 import javax.validation.Valid;
 import java.io.IOException;
 import java.util.*;
@@ -38,33 +38,34 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.toMap;
 
 @Service
+@Slf4j
 public class AlarmService {
+    private static final String FSM_GROUP_QUERY = QueryPropertyConfig.getProperties().getProperty("FSM_GROUP_QUERY");
+    private static final String CONTRACTOR_QUERY = "SELECT ma_location c1, upper(ma_flm_subcontractor) c2\n" +
+            "FROM mci_clarity.mci_aras\n" +
+            "WHERE REGEXP_LIKE ( ma_location, '^TH\\d{4}(-\\w)?$') and ma_flm_subcontractor is not null";
+    private static final String AREA_QUERY = QueryPropertyConfig.getProperties().getProperty("AREA_QUERY");
 
 
+    private ConvertToDTO convertToDTO;
+    private ProblemService problemService;
+    private RedisProblemService redisProblemService;
+    private EntityManager entityManager;
     private Map<String, String> siteIdToFSMGroup;
     private AttributeHelper attributeHelper;
     private RuleAttributeRepository ruleAttributeRepository;
     private CreateFaultDTO createFaultDTO = new CreateFaultDTO();
     private KieSession kieSession;
-    private AlarmRepository alarmRepository;
+    private AlarmCoomentsRepository alarmCoomentsRepository;
     private FeignService feignService;
     private FeignServiceManager feignServiceManager;
     private FeignAlarmAction feignAlarmAction;
     private ApplicationVariables appVars;
     private Map<String, String> cityMap;
     private Map<String, String> siteIdToArea;
-    private  AlarmStatesRepository alarmStatesRepository;
+    private AlarmStatesRepository alarmStatesRepository;
 
 
-    private static final String FSM_GROUP_QUERY = "SELECT mfwo_province c1 ,mfwo_workgroup c2 FROM mci_clarity.mci_fsm_workgroups";
-    private static final String CONTRACTOR_QUERY = "SELECT ma_location c1, upper(ma_flm_subcontractor) c2\n" +
-            "FROM mci_clarity.mci_aras\n" +
-            "WHERE REGEXP_LIKE ( ma_location, '^TH\\d{4}(-\\w)?$') and ma_flm_subcontractor is not null";
-    private static final String AREA_QUERY = "SELECT locn_ttname c1, area_code c2, area_area_code c3\n" +
-            "FROM locations l, areas a\n" +
-            "WHERE l.locn_area_code = a.area_code AND REGEXP_LIKE ( locn_ttname, '^[A-Z]{2}\\d{4}$' )";
-
-    private EntityManager entityManager;
 
     @PostConstruct
     public void doIt() {
@@ -72,11 +73,16 @@ public class AlarmService {
     }
 
     @Autowired
-    public AlarmService(KieSession kieSession, AttributeHelper attributeHelper, EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository,
-                        AlarmStatesRepository alarmStatesRepository,ApplicationVariables appVars, AlarmRepository alarmRepository, FeignService feignService, FeignServiceManager feignServiceManager, FeignAlarmAction feignAlarmAction) {
+    public AlarmService(ConvertToDTO convertToDTO, ProblemService problemService, RedisProblemService redisProblemService, KieSession kieSession, AttributeHelper attributeHelper, EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository,
+                        AlarmStatesRepository alarmStatesRepository, ApplicationVariables appVars, AlarmCoomentsRepository alarmCoomentsRepository, FeignService feignService,
+                        FeignServiceManager feignServiceManager, FeignAlarmAction feignAlarmAction) {
+        this.convertToDTO = convertToDTO;
+
         initCityMap();
+        this.problemService = problemService;
+        this.redisProblemService = redisProblemService;
         this.kieSession = kieSession;
-        this.alarmRepository = alarmRepository;
+        this.alarmCoomentsRepository = alarmCoomentsRepository;
         this.feignService = feignService;
         this.feignServiceManager = feignServiceManager;
         this.feignAlarmAction = feignAlarmAction;
@@ -84,18 +90,20 @@ public class AlarmService {
         this.entityManager = entityManager;
         this.ruleAttributeRepository = ruleAttributeRepository;
         this.attributeHelper = attributeHelper;
-        this.alarmStatesRepository=alarmStatesRepository;
+        this.alarmStatesRepository = alarmStatesRepository;
+
     }
 
     public List<AlarmComments> getAlarms() {
-        return alarmRepository.findAll();
+        return alarmCoomentsRepository.findAll();
     }
 
     public List<CreateFaultDTO> getRelatedAlarms(String token, String userId, String severity, String comment) throws IOException {
         String query = QueryPropertyConfig.getProperties().getProperty("get.alarms");
         List<Alarm> relatedAlarms = entityManager.createNativeQuery(query, "AlarmMapping").getResultList();
+        CreateFaultDTO createFaultDTO=new CreateFaultDTO();
         List<CreateFaultDTO> createFaultDTOS = new ArrayList<>();
-        CreateFaultDTO createFaultDTO2 = new CreateFaultDTO();
+
         int counter = 0;
         for (Alarm alarm : relatedAlarms) {
 
@@ -103,70 +111,58 @@ public class AlarmService {
             kieSession.fireAllRules();
 
             if (alarm.getAction() != null) {
+                log.info("Alarm OccurrncedId  :  " + alarm.getAlasOccurrenceId());
                 counter++;
-                doAlarmAck(token, "ACK", Stream.of(alarm.getAlasOccurrenceId()).collect(Collectors.toList()), severity, comment);
-
+                doAlarmAction(token, "ACK", Stream.of(alarm.getAlasOccurrenceId()).collect(Collectors.toList()), severity, comment);
                 AlarmStates alarmStates = alarmStatesRepository.getByAlasOccurrenceId(alarm.getAlasOccurrenceId());
-                if (alarmStates.getAlasAcknowledged()!=null){
-                if (getTechnologies(alarm.getAlamEqupIndex(), alarm.getAlamEventType(), alarm.getAlamProbableCause(), alarm.getAlasMessage()) != null) {
-                    for (char c : alarm.getAction().toCharArray()) {
-                        if (c == 'F') {
-                            createFaultDTO.setCause(alarm.getCause());
-                            createFaultDTO.setImpact(alarm.getImpact());
-                            createFaultDTO.setWorgName(alarm.getWorkGroup());
-                            createFaultDTO.setReportedTime(alarm.getAlamReported());
-                            createFaultDTO.setReportedby("COMPLEX_ADMIN");
-                            createFaultDTO.setPriority(2L);
-                            createFaultDTO.setDescription("this is a test. ");
-                            createFaultDTO.setType(alarm.getType());
-                            createFaultDTO.setRegnCode(alarm.getAlamAreaCode());
-                            createFaultDTO.setEntity(entity(alarm.getCause()));
-                            LinksDTO linksDTO = new LinksDTO();
-                            List<LinksDTO> linksDTOS = new ArrayList<>();
-                            linksDTO.setForeignId(alarm.getAlasOccurrenceId());
-                            linksDTO.setForeignParent(alarm.getAlamId().toString());
-                            linksDTO.setForeignType("ALARMS");
-                            linksDTOS.add(linksDTO);
 
-                            TicketParams ticketParams = new TicketParams();
-                            ticketParams.setSiteId(alarm.getAlamLocnTtname());
-                            ticketParams.setAttributeCategory(getSubCategory(alarm.getAlamMansName()));
-                            ticketParams.setEventClearDate(alarm.getAlasCleared());
-                            ticketParams.setEventStartDate(alarm.getAlamReported());
-                            ticketParams.setEventType(alarm.getCause());
-                            Set<String> set = new HashSet<String>();
-                            set.add(getTechnologies(alarm.getAlamEqupIndex(), alarm.getAlamEventType(), alarm.getAlamProbableCause(), alarm.getAlasMessage()));
-                            ticketParams.setTechnologies(set);
-                            ticketParams.setNetworks(getNetwork(alarm.getAlamEqupIndex(), alarm.getAlamEventType(), alarm.getAlamProbableCause(), alarm.getAlasMessage()));
+                if (alarmStates.getAlasAcknowledged() != null) {
+                    if (linkedProblem(alarm, token, userId).size()==0) {
+                        if (getLocation(alarm) != null || getTechnologies(alarm) != null) {
+                            for (char c : alarm.getAction().toCharArray()) {
+                                if (c == 'F') {
+                                    createFaultDTO=createFault(alarm, token);
+                                            createFaultDTOS.add(createFaultDTO);
 
-                            createFaultDTO.setLinks(linksDTOS);
-                            createFaultDTO.setAttributes(extractAttributes(ticketParams, alarm));
-                            createFaultDTO2 = createFaultWOA(token, createFaultDTO);
-                            createFaultDTOS.add(createFaultDTO2);
-                        }
-                        if (c == 'J') {
-                            FaultJobTicketDTO faultJobTicketDTO = new FaultJobTicketDTO(getFsmWorkGroup(alarm.getAlamLocnTtname()), "1", new Date(), getAreaCode(alarm.getAlamLocnTtname()), "MCI", "");
-                            if (faultJobTicketDTO.getFsmWorkGroup() != null) {
-                                createFaultJobTicket(createFaultDTO2.getNumber().toString(), faultJobTicketDTO, token, userId);
-                            } else
-                                System.out.println("no job ticket workgroup!!");
-                        }
-                        if (c == 'W') {
-                            WorkOrderDetailDTO workOrderDetailDTO = new WorkOrderDetailDTO();
-                            workOrderDetailDTO.setPromNumber(createFaultDTO2.getNumber());
-                            workOrderDetailDTO.setOrderType("CREATE");
-                            workOrderDetailDTO.setWorkGroup(alarm.getWorkGroup());
-                            workOrderDetailDTO.setDescription("avasvsadvsdvsd");
 
-                            insertWorkOrder(token, workOrderDetailDTO, true, userId);
+                                }
+                                if (c == 'J') {
+                                    FaultJobTicketDTO faultJobTicketDTO = new FaultJobTicketDTO(getFsmWorkGroup(alarm.getAlamLocnTtname()), "1", new Date(), getAreaCode(alarm.getAlamLocnTtname()), "MCI", "");
+                                    if (faultJobTicketDTO.getFsmWorkGroup() != null) {
+                                        createFaultJobTicket(createFaultDTO.getNumber().toString(), faultJobTicketDTO, token, userId);
+                                    } else
+                                        log.info("no job ticket workgroup!!");
+
+                                }
+                                if (c == 'W') {
+                                    WorkOrderDetailDTO workOrderDetailDTO = new WorkOrderDetailDTO();
+                                    workOrderDetailDTO.setPromNumber(createFaultDTO.getNumber());
+                                    workOrderDetailDTO.setOrderType("CREATE");
+                                    workOrderDetailDTO.setWorkGroup(alarm.getWorkGroup());
+                                    workOrderDetailDTO.setDescription("avasvsadvsdvsd");
+
+                                    insertWorkOrder(token, workOrderDetailDTO, true, userId);
+                                }
+                            }
+                        } else {
+                            log.info(" create fault NI Ticket");
+                            createFaultNI(alarm, token);
+
                         }
                     }
+                } else {
+                    log.info(alarm.getAlasOccurrenceId() + "  not ack");
+
                 }
-            }}
+            }
+
         }
-            System.out.println("total processed alarms = " + counter);
-            return createFaultDTOS;
-        }
+        log.info("total processed alarms = " + counter);
+
+        return createFaultDTOS;
+
+
+    }
 
 
     public CreateFaultDTO createFaultWOA(String token, CreateFaultDTO createFaultDTO) throws IOException {
@@ -177,10 +173,7 @@ public class AlarmService {
         return feignServiceManager.insert(token, workOrderDTO, forceCreate, userId);
     }
 
-    //    public ActivityJobTicketDTO createJobTicket( String parentId,ActivityJobTicketDTO activityJobTicketDTO,String token){
-//        return feignService.createJrobTicket(parentId,activityJobTicketDTO,token);
-//
-//    }
+
     public JobTicketDetailDTO createFaultJobTicket(String parentId, FaultJobTicketDTO faultJobTicketDTO, String token, String userId) {
         return feignService.createFaultJobTicket(parentId, faultJobTicketDTO, token, userId);
     }
@@ -349,36 +342,9 @@ public class AlarmService {
         return null;
     }
 
-    public String getTechnologies(String alamEqupIndex, String eventType,String alamProbableCause,String alasMessage ) {
-        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})([A-Z0-9]{1}[GDUL]{1,3})(\\d{4}).*");
-//        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})(\\d{4}).*");
-        String result = null;
-        if (alamEqupIndex != null && eventType != null && alamProbableCause != null && alasMessage != null) {
-            Matcher matcherEqupIndex = LocnPattern.matcher(alamEqupIndex);
-            Matcher matcherEventType = LocnPattern.matcher(eventType);
-//            Matcher matcherLocnTTname = LocnPattern.matcher(alamLocnTTname);
-            Matcher matcherAlasMessage=LocnPattern.matcher(alasMessage);
-            Matcher matcherAlamProbableCause=LocnPattern.matcher(alamProbableCause);
 
-            if (matcherEqupIndex.matches()) {
-                result = matcherEqupIndex.group(2);
-            } else if (matcherEventType.matches()) {
-                result = (matcherEventType.group(2));
-
-            }
-          else if (matcherAlamProbableCause.matches()) {
-                result = matcherAlamProbableCause.group(2);
-            } else if (matcherAlasMessage.matches()) {
-                result = matcherAlasMessage.group(2);
-            }else {
-                return null;
-            }
-        }
-        return result;
-    }
-
-    public EnumSet<Network> getNetwork(String alamEqupIndex, String eventType, String alamProbableCause,String alasMessage) {
-        String technology = getTechnologies(alamEqupIndex, eventType, alamProbableCause,alasMessage);
+    public EnumSet<Network> getNetwork(Alarm alarm) {
+        String technology = getTechnologies(alarm);
         List<Network> networks = new ArrayList<>();
         if (technology == null)
             return EnumSet.noneOf(Network.class);
@@ -390,6 +356,272 @@ public class AlarmService {
             networks.add(Network.G4G);
         return EnumSet.copyOf(networks);
 
+    }
+
+    public CreateFaultDTO createFault(Alarm alarm, String token) throws IOException {
+        CreateFaultDTO createFaultDTO2 = new CreateFaultDTO();
+        createFaultDTO.setCause(alarm.getCause());
+        createFaultDTO.setImpact(alarm.getImpact());
+        createFaultDTO.setWorgName(alarm.getWorkGroup());
+        createFaultDTO.setReportedTime(alarm.getAlamReported());
+        createFaultDTO.setReportedby("COMPLEX_ADMIN");
+        createFaultDTO.setPriority(2L);
+        createFaultDTO.setDescription("this is a test. ");
+        createFaultDTO.setType(alarm.getType());
+        createFaultDTO.setRegnCode(alarm.getAlamAreaCode());
+        createFaultDTO.setEntity(entity(alarm.getCause()));
+
+        createFaultDTO.setLinks(createLink(alarm));
+        createFaultDTO.setAttributes(extractAttributes(createTicketParams(alarm), alarm));
+        createFaultDTO2 = createFaultWOA(token, createFaultDTO);
+        log.info("create fault   " + createFaultDTO2.getNumber());
+        ProblemDTO problemDTO=convertToDTO.MapToProlemDto(createFaultDTO2, alarm);
+        redisProblemService.redisMyProblemDTO(problemDTO);
+        return createFaultDTO2;
+
+
+    }
+
+    private List<LinksDTO> createLink(Alarm alarm) {
+        LinksDTO linksDTO = new LinksDTO();
+        List<LinksDTO> linksDTOS = new ArrayList<>();
+        linksDTO.setForeignId(alarm.getAlasOccurrenceId());
+        linksDTO.setForeignParent(alarm.getAlamId().toString());
+        linksDTO.setForeignType("ALARMS");
+        linksDTOS.add(linksDTO);
+        return linksDTOS;
+
+    }
+
+    public TicketParams createTicketParams(Alarm alarm) {
+        TicketParams ticketParams = new TicketParams();
+        ticketParams.setSiteId(alarm.getAlamLocnTtname());
+        ticketParams.setAttributeCategory(getSubCategory(alarm.getAlamMansName()));
+        ticketParams.setEventClearDate(alarm.getAlasCleared());
+        ticketParams.setEventStartDate(alarm.getAlamReported());
+        ticketParams.setEventType(alarm.getCause());
+        Set<String> set = new HashSet<String>();
+        set.add(getTechnologies(alarm));
+        ticketParams.setTechnologies(set);
+        ticketParams.setNetworks(getNetwork(alarm));
+        return ticketParams;
+
+    }
+
+    public CreateFaultDTO createFaultNI(Alarm alarm, String token) throws IOException {
+        CreateFaultDTO createFaultDTO2=new CreateFaultDTO();
+        createFaultDTO.setImpact(alarm.getImpact());
+        createFaultDTO.setWorgName(alarm.getWorkGroup());
+        createFaultDTO.setReportedTime(alarm.getAlamReported());
+        createFaultDTO.setReportedby("COMPLEX_ADMIN");
+        createFaultDTO.setPriority(2L);
+        createFaultDTO.setDescription("this is a test. ");
+
+        createFaultDTO.setRegnCode(alarm.getAlamAreaCode());
+        createFaultDTO.setEntity(entity(alarm.getCause()));
+        createFaultDTO.setType("NETWORK_FAULT");
+        createFaultDTO.setCause("NI:NI SITE");
+        createFaultDTO.setLinks(createLink(alarm));
+        createFaultDTO.setAttributes(extractAttributes(createTicketParamsNI(alarm), alarm));
+        createFaultDTO2 = createFaultWOA(token, createFaultDTO);
+        log.info("Create Fault NI  " + createFaultDTO2.getNumber());
+        return createFaultDTO2;
+
+    }
+
+    public String getLocation(Alarm alarm) {
+
+        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})(\\d{4}).*");
+        if (alarm.getAlamLocnTtname() != null) {
+            Matcher matcherLocnTtname = LocnPattern.matcher(alarm.getAlamLocnTtname());
+            if (matcherLocnTtname.matches()) {
+                return matcherLocnTtname.group(1) + matcherLocnTtname.group(2);
+//
+            }
+        }
+        if (alarm.getAlamEqupIndex() != null) {
+            Matcher matcherEqupIndex = LocnPattern.matcher(alarm.getAlamEqupIndex());
+            if (matcherEqupIndex.matches()) {
+                return matcherEqupIndex.group(1) + matcherEqupIndex.group(2);
+            }
+        }
+        if (alarm.getAlamEventType() != null) {
+            Matcher matcherEventType = LocnPattern.matcher(alarm.getAlamEventType());
+            if (matcherEventType.matches()) {
+                return matcherEventType.group(1) + matcherEventType.group(2);
+            }
+
+        }
+        if (alarm.getAlasMessage() != null) {
+            Matcher matcherAlasMessage = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlasMessage.matches()) {
+                return matcherAlasMessage.group(1) + matcherAlasMessage.group(2);
+            }
+        }
+        if (alarm.getAlamPort() != null) {
+            Matcher matcherAlamPost = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlamPost.matches()) {
+                return matcherAlamPost.group(1) + matcherAlamPost.group(2);
+            }
+
+        }
+
+        return null;
+
+    }
+
+    public String getTechnologies(Alarm alarm) {
+
+
+        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})([A-Z0-9]{1}[GDUL]{1,3})(\\d{4}).*");
+
+        if (alarm.getAlamEqupIndex() != null) {
+            Matcher matcherEqupIndex = LocnPattern.matcher(alarm.getAlamEqupIndex());
+            if (matcherEqupIndex.matches()) {
+                return matcherEqupIndex.group(2);
+            }
+        }
+        if (alarm.getAlamEventType() != null) {
+            Matcher matcherEventType = LocnPattern.matcher(alarm.getAlamEventType());
+            if (matcherEventType.matches()) {
+                return (matcherEventType.group(2));
+
+            }
+        }
+        if (alarm.getAlasMessage() != null) {
+            Matcher matcherAlasMessage = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlasMessage.matches()) {
+                return matcherAlasMessage.group(2);
+            }
+        }
+        if (alarm.getAlamProbableCause() != null) {
+            Matcher matcherAlamProbableCause = LocnPattern.matcher(alarm.getAlamProbableCause());
+            if (matcherAlamProbableCause.matches()) {
+                return matcherAlamProbableCause.group(2);
+            }
+        }
+
+        return null;
+    }
+
+    public TicketParams createTicketParamsNI(Alarm alarm) {
+        TicketParams ticketParams = new TicketParams();
+        ticketParams.setSiteId(alarm.getAlamLocnTtname());
+        ticketParams.setAttributeCategory(getSubCategory(alarm.getAlamMansName()));
+        ticketParams.setEventClearDate(alarm.getAlasCleared());
+        ticketParams.setEventStartDate(alarm.getAlamReported());
+        ticketParams.setEventType(alarm.getCause());
+        Set<String> set = new HashSet<String>();
+        set.add(alarm.getAlamLocnTtname());
+        ticketParams.setTechnologies(set);
+        ticketParams.setNetworks(getNetwork(alarm));
+        return ticketParams;
+
+    }
+
+    private List<ProblemLinks> linkedProblem(Alarm alarm, String token, String userId) {
+        log.info("start linked  problem");
+        List<ProblemLinks> problemLinks = new ArrayList<>();
+        List<ProblemDTO> myProblemDTOS = filterMYProblemDTO(alarm);
+        if (myProblemDTOS.size() != 0) {
+
+            for (ProblemDTO problemDTO : myProblemDTOS) {
+                if (problemService.checkStatus(problemDTO.getPROM_NUMBER()) != null) {
+                    createLink(alarm);
+                    problemLinks = createFaultLinks(problemDTO.getPROM_NUMBER(), createLink(alarm), token, userId);
+                    break;
+                }
+            }
+            return problemLinks;
+        } else {
+            List<ProblemDTO> problemDTOS = filterProblemDTO(alarm);
+
+            for (ProblemDTO problemDTO : problemDTOS) {
+                if (problemService.checkStatus(problemDTO.getPROM_NUMBER()) != null) {
+                    createLink(alarm);
+                    problemLinks = createFaultLinks(problemDTO.getPROM_NUMBER(), createLink(alarm), token, userId);
+                    break;
+
+                }
+            }
+            return problemLinks;
+        }
+
+    }
+
+
+    private List<ProblemDTO> filterProblemDTO(Alarm alarm) {
+
+        List<ProblemDTO> problemDTOS = redisProblemService.getProblemDTO();
+
+        List<ProblemDTO> filterProblem = new ArrayList<>();
+
+        for (ProblemDTO problem : problemDTOS) {
+            log.info("alarm type  :" +alarm.getAlamAlarmType());
+            log.info("problemDTO :" +problem.getALAM_ALARMTYPE());
+            log.info("value: " +problem.getPRAT_VALUE());
+            log.info("getLocation: " +getLocation(alarm));
+            log.info("getTechnologies:  "+getTechnologiesRegex(alarm));
+            if (problem.getALAM_ALARMTYPE().equals(alarm.getType()) &&
+                    (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologies(alarm)))) {
+                filterProblem.add(problem);
+            }
+
+        }
+        return filterProblem;
+
+    }
+
+    private List<ProblemDTO> filterMYProblemDTO(Alarm alarm) {
+
+        List<ProblemDTO> problemDTOS = redisProblemService.getMyProblemDTO();
+
+        List<ProblemDTO> filterProblem = new ArrayList<>();
+        if (problemDTOS != null) {
+            for (ProblemDTO problem : problemDTOS) {
+                if (problem.getALAM_ALARMTYPE().equals(alarm.getType()) &&
+                        (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologiesRegex(alarm)))) {
+                    filterProblem.add(problem);
+                }
+
+            }
+        }
+        return filterProblem;
+
+    }
+
+    public String getTechnologiesRegex(Alarm alarm) {
+
+
+        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})([A-Z0-9]{1}[GDUL]{1,3})(\\d{4}).*");
+
+        if (alarm.getAlamEqupIndex() != null) {
+            Matcher matcherEqupIndex = LocnPattern.matcher(alarm.getAlamEqupIndex());
+            if (matcherEqupIndex.matches()) {
+                return matcherEqupIndex.group(1)+matcherEqupIndex.group(3);
+            }
+        }
+        if (alarm.getAlamEventType() != null) {
+            Matcher matcherEventType = LocnPattern.matcher(alarm.getAlamEventType());
+            if (matcherEventType.matches()) {
+                return (matcherEventType.group(1)+matcherEventType.group(3));
+
+            }
+        }
+        if (alarm.getAlasMessage() != null) {
+            Matcher matcherAlasMessage = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlasMessage.matches()) {
+                return matcherAlasMessage.group(1)+matcherAlasMessage.group(3);
+            }
+        }
+        if (alarm.getAlamProbableCause() != null) {
+            Matcher matcherAlamProbableCause = LocnPattern.matcher(alarm.getAlamProbableCause());
+            if (matcherAlamProbableCause.matches()) {
+                return matcherAlamProbableCause.group(1)+matcherAlamProbableCause.group(3);
+            }
+        }
+
+        return null;
     }
 
 

@@ -1,6 +1,6 @@
 package com.example.alarmdrools.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+
 
 import java.io.*;
 import java.util.Properties;

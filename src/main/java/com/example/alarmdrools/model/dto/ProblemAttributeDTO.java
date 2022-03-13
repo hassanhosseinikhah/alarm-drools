@@ -22,7 +22,7 @@ public class ProblemAttributeDTO {
     private Optionality optionality;
     private Long displayOrder;
     private DataType dataType;
-    private boolean hasLov = false;
+//    private boolean hasLov = false;
 
 
     public ProblemAttributeDTO() {
