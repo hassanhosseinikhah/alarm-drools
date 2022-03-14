@@ -23,8 +23,6 @@ public class RedisProblemService {
     public void redisdCreateForQuery(List<ProblemDTO> problemDTOS) {
 
             hashOperations.put("ProblemDTO",1, problemDTOS);
-
-
     }
 
     public List<ProblemDTO> getProblemDTO() {
@@ -39,10 +37,19 @@ public class RedisProblemService {
     public List<ProblemDTO> getMyProblemDTO() {
 
         Map<Object, ProblemDTO> map =  hashOperations.entries("CreateFaultDTO");
-        ArrayList<ProblemDTO> problemDTOS = new ArrayList<ProblemDTO>(map.values());
-        return problemDTOS;
+        //        for (ProblemDTO p:problemDTOS) {
+//            hashOperations.delete("CreateFaultDTO",p.getPROM_NUMBER());
+
+//        }
+
+        return new ArrayList<>(map.values());
 
     }
+//    public void deleteRedis(ArrayList<ProblemDTO> problemDTOS){
+//        for (ProblemDTO p:problemDTOS) {
+//            hashOperations.delete("CreateFaultDTO",p.getPROM_NUMBER());
+//        }
+//    }
 
 
 

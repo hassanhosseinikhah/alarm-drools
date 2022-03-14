@@ -66,7 +66,6 @@ public class AlarmService {
     private AlarmStatesRepository alarmStatesRepository;
 
 
-
     @PostConstruct
     public void doIt() {
         refreshData();
@@ -101,7 +100,7 @@ public class AlarmService {
     public List<CreateFaultDTO> getRelatedAlarms(String token, String userId, String severity, String comment) throws IOException {
         String query = QueryPropertyConfig.getProperties().getProperty("get.alarms");
         List<Alarm> relatedAlarms = entityManager.createNativeQuery(query, "AlarmMapping").getResultList();
-        CreateFaultDTO createFaultDTO=new CreateFaultDTO();
+        CreateFaultDTO createFaultDTO = new CreateFaultDTO();
         List<CreateFaultDTO> createFaultDTOS = new ArrayList<>();
 
         int counter = 0;
@@ -117,12 +116,12 @@ public class AlarmService {
                 AlarmStates alarmStates = alarmStatesRepository.getByAlasOccurrenceId(alarm.getAlasOccurrenceId());
 
                 if (alarmStates.getAlasAcknowledged() != null) {
-                    if (linkedProblem(alarm, token, userId).size()==0) {
+                    if (linkedProblem(alarm, token, userId).size() == 0) {
                         if (getLocation(alarm) != null || getTechnologies(alarm) != null) {
                             for (char c : alarm.getAction().toCharArray()) {
                                 if (c == 'F') {
-                                    createFaultDTO=createFault(alarm, token);
-                                            createFaultDTOS.add(createFaultDTO);
+                                    createFaultDTO = createFault(alarm, token);
+                                    createFaultDTOS.add(createFaultDTO);
 
 
                                 }
@@ -154,10 +153,10 @@ public class AlarmService {
                     log.info(alarm.getAlasOccurrenceId() + "  not ack");
 
                 }
-            }
 
+            }
         }
-        log.info("total processed alarms = " + counter);
+        log.info("  END, total processed alarms = " + counter);
 
         return createFaultDTOS;
 
@@ -375,7 +374,7 @@ public class AlarmService {
         createFaultDTO.setAttributes(extractAttributes(createTicketParams(alarm), alarm));
         createFaultDTO2 = createFaultWOA(token, createFaultDTO);
         log.info("create fault   " + createFaultDTO2.getNumber());
-        ProblemDTO problemDTO=convertToDTO.MapToProlemDto(createFaultDTO2, alarm);
+        ProblemDTO problemDTO = convertToDTO.MapToProlemDto(createFaultDTO2, alarm);
         redisProblemService.redisMyProblemDTO(problemDTO);
         return createFaultDTO2;
 
@@ -409,7 +408,7 @@ public class AlarmService {
     }
 
     public CreateFaultDTO createFaultNI(Alarm alarm, String token) throws IOException {
-        CreateFaultDTO createFaultDTO2=new CreateFaultDTO();
+        CreateFaultDTO createFaultDTO2 = new CreateFaultDTO();
         createFaultDTO.setImpact(alarm.getImpact());
         createFaultDTO.setWorgName(alarm.getWorkGroup());
         createFaultDTO.setReportedTime(alarm.getAlamReported());
@@ -520,15 +519,19 @@ public class AlarmService {
     }
 
     private List<ProblemLinks> linkedProblem(Alarm alarm, String token, String userId) {
-        log.info("start linked  problem");
+
         List<ProblemLinks> problemLinks = new ArrayList<>();
         List<ProblemDTO> myProblemDTOS = filterMYProblemDTO(alarm);
         if (myProblemDTOS.size() != 0) {
 
             for (ProblemDTO problemDTO : myProblemDTOS) {
                 if (problemService.checkStatus(problemDTO.getPROM_NUMBER()) != null) {
+                    log.info("START linked  problem My Redis");
+                    log.info("Alarm occur" + alarm.getAlasOccurrenceId());
+                    log.info("Number Problem " + problemDTO.getPROM_NUMBER());
                     createLink(alarm);
                     problemLinks = createFaultLinks(problemDTO.getPROM_NUMBER(), createLink(alarm), token, userId);
+                    log.info("END linked  problem My Redis");
                     break;
                 }
             }
@@ -538,8 +541,13 @@ public class AlarmService {
 
             for (ProblemDTO problemDTO : problemDTOS) {
                 if (problemService.checkStatus(problemDTO.getPROM_NUMBER()) != null) {
+                    log.info("START linked  problem Query Redis");
+                    log.info("Alarm occur" + alarm.getAlasOccurrenceId());
+                    log.info("Number Problem " + problemDTO.getPROM_NUMBER());
                     createLink(alarm);
                     problemLinks = createFaultLinks(problemDTO.getPROM_NUMBER(), createLink(alarm), token, userId);
+                    log.info("END linked  problem Query Redis");
+
                     break;
 
                 }
@@ -557,16 +565,17 @@ public class AlarmService {
         List<ProblemDTO> filterProblem = new ArrayList<>();
 
         for (ProblemDTO problem : problemDTOS) {
-            log.info("alarm type  :" +alarm.getAlamAlarmType());
-            log.info("problemDTO :" +problem.getALAM_ALARMTYPE());
-            log.info("value: " +problem.getPRAT_VALUE());
-            log.info("getLocation: " +getLocation(alarm));
-            log.info("getTechnologies:  "+getTechnologiesRegex(alarm));
-            if (problem.getALAM_ALARMTYPE().equals(alarm.getType()) &&
-                    (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologies(alarm)))) {
-                filterProblem.add(problem);
+//            log.info("****************************************************************************************************");
+//            log.info("alarm type  :" + alarm.getAlamAlarmType());
+//            log.info("problemDTO :" + problem.getALAM_ALARMTYPE());
+//            log.info("value: " + problem.getPRAT_VALUE());
+//            log.info("getLocation: " + getLocation(alarm));
+//            log.info("getTechnologies:  " + getTechnologiesRegex(alarm));
+            if (problem.getALAM_ALARMTYPE().equals(alarm.getAlamAlarmType())) {
+                if (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologies(alarm))) {
+                    filterProblem.add(problem);
+                }
             }
-
         }
         return filterProblem;
 
@@ -579,11 +588,20 @@ public class AlarmService {
         List<ProblemDTO> filterProblem = new ArrayList<>();
         if (problemDTOS != null) {
             for (ProblemDTO problem : problemDTOS) {
-                if (problem.getALAM_ALARMTYPE().equals(alarm.getType()) &&
-                        (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologiesRegex(alarm)))) {
-                    filterProblem.add(problem);
-                }
 
+//                log.info("***********************Start*****************************************");
+//                log.info("alarm type  :" + alarm.getAlamAlarmType());
+//                log.info("problemDTO :" + problem.getALAM_ALARMTYPE());
+//                log.info("value: " + problem.getPRAT_VALUE());
+//                log.info("getLocation: " + getLocation(alarm));
+//                log.info("getTechnologies:  " + getTechnologiesRegex(alarm));
+
+
+                if (problem.getALAM_ALARMTYPE().equals(alarm.getAlamAlarmType())) {
+                    if (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologiesRegex(alarm))) {
+                        filterProblem.add(problem);
+                    }
+                }
             }
         }
         return filterProblem;
@@ -598,26 +616,26 @@ public class AlarmService {
         if (alarm.getAlamEqupIndex() != null) {
             Matcher matcherEqupIndex = LocnPattern.matcher(alarm.getAlamEqupIndex());
             if (matcherEqupIndex.matches()) {
-                return matcherEqupIndex.group(1)+matcherEqupIndex.group(3);
+                return matcherEqupIndex.group(1) + matcherEqupIndex.group(3);
             }
         }
         if (alarm.getAlamEventType() != null) {
             Matcher matcherEventType = LocnPattern.matcher(alarm.getAlamEventType());
             if (matcherEventType.matches()) {
-                return (matcherEventType.group(1)+matcherEventType.group(3));
+                return (matcherEventType.group(1) + matcherEventType.group(3));
 
             }
         }
         if (alarm.getAlasMessage() != null) {
             Matcher matcherAlasMessage = LocnPattern.matcher(alarm.getAlasMessage());
             if (matcherAlasMessage.matches()) {
-                return matcherAlasMessage.group(1)+matcherAlasMessage.group(3);
+                return matcherAlasMessage.group(1) + matcherAlasMessage.group(3);
             }
         }
         if (alarm.getAlamProbableCause() != null) {
             Matcher matcherAlamProbableCause = LocnPattern.matcher(alarm.getAlamProbableCause());
             if (matcherAlamProbableCause.matches()) {
-                return matcherAlamProbableCause.group(1)+matcherAlamProbableCause.group(3);
+                return matcherAlamProbableCause.group(1) + matcherAlamProbableCause.group(3);
             }
         }
 

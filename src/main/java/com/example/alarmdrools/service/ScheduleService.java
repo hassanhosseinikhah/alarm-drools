@@ -49,7 +49,7 @@ public class ScheduleService {
 //        redisProblemService.redidCreate(problemDTOS);
 //        alarmService.getProblem();
 //    }
-//    @Scheduled(cron = "* */2 * * * *")
+//    @Scheduled(cron = "0 0 1,13 * * *")
 //    public void schedulerForRedisInsert() {
 //        List<ProblemDTO> problemDTOS = problemService.createProblem();
 //        redisProblemService.redisdCreateForQuery(problemDTOS);
