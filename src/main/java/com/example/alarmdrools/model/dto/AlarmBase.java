@@ -11,6 +11,7 @@ public class AlarmBase {
      private String level;
     private String impact;
     private  String type;
+    private String workOrder;
 
     public String getCause() {
         return cause;
@@ -58,5 +59,13 @@ public class AlarmBase {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getWorkOrder() {
+        return workOrder;
+    }
+
+    public void setWorkOrder(String workOrder) {
+        this.workOrder = workOrder;
     }
 }

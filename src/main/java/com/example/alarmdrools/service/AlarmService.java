@@ -20,6 +20,7 @@ import com.example.alarmdrools.repository.RuleAttributeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.kie.api.runtime.KieSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -40,11 +41,18 @@ import static java.util.stream.Collectors.toMap;
 @Service
 @Slf4j
 public class AlarmService {
-    private static final String FSM_GROUP_QUERY = QueryPropertyConfig.getProperties().getProperty("FSM_GROUP_QUERY");
-    private static final String CONTRACTOR_QUERY = "SELECT ma_location c1, upper(ma_flm_subcontractor) c2\n" +
-            "FROM mci_clarity.mci_aras\n" +
-            "WHERE REGEXP_LIKE ( ma_location, '^TH\\d{4}(-\\w)?$') and ma_flm_subcontractor is not null";
-    private static final String AREA_QUERY = QueryPropertyConfig.getProperties().getProperty("AREA_QUERY");
+
+    @Value("${query.FSM_GROUP_QUERY}")
+    private String FSM_GROUP_QUERY;
+
+    @Value("${query.CONTRACTOR_QUERY}")
+    private String CONTRACTOR_QUERY;
+
+    @Value("${query.AREA_QUERY}")
+    private String AREA_QUERY;
+
+    @Value("${query.GET_ALARMS}")
+    private String GET_ALARMS;
 
 
     private ConvertToDTO convertToDTO;
@@ -56,13 +64,13 @@ public class AlarmService {
     private RuleAttributeRepository ruleAttributeRepository;
     private CreateFaultDTO createFaultDTO = new CreateFaultDTO();
     private KieSession kieSession;
-    private AlarmCoomentsRepository alarmCoomentsRepository;
     private FeignService feignService;
     private FeignServiceManager feignServiceManager;
     private FeignAlarmAction feignAlarmAction;
     private ApplicationVariables appVars;
     private Map<String, String> cityMap;
     private Map<String, String> siteIdToArea;
+    private Map<String, String> map;
     private AlarmStatesRepository alarmStatesRepository;
 
 
@@ -72,16 +80,19 @@ public class AlarmService {
     }
 
     @Autowired
-    public AlarmService(ConvertToDTO convertToDTO, ProblemService problemService, RedisProblemService redisProblemService, KieSession kieSession, AttributeHelper attributeHelper, EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository,
-                        AlarmStatesRepository alarmStatesRepository, ApplicationVariables appVars, AlarmCoomentsRepository alarmCoomentsRepository, FeignService feignService,
+    public AlarmService(ConvertToDTO convertToDTO, ProblemService problemService, RedisProblemService redisProblemService,
+                        KieSession kieSession, AttributeHelper attributeHelper,
+                        EntityManager entityManager, RuleAttributeRepository ruleAttributeRepository,
+                        AlarmStatesRepository alarmStatesRepository, ApplicationVariables appVars,  FeignService feignService,
                         FeignServiceManager feignServiceManager, FeignAlarmAction feignAlarmAction) {
-        this.convertToDTO = convertToDTO;
+
 
         initCityMap();
+        initWorkGroup();
         this.problemService = problemService;
         this.redisProblemService = redisProblemService;
         this.kieSession = kieSession;
-        this.alarmCoomentsRepository = alarmCoomentsRepository;
+
         this.feignService = feignService;
         this.feignServiceManager = feignServiceManager;
         this.feignAlarmAction = feignAlarmAction;
@@ -90,16 +101,16 @@ public class AlarmService {
         this.ruleAttributeRepository = ruleAttributeRepository;
         this.attributeHelper = attributeHelper;
         this.alarmStatesRepository = alarmStatesRepository;
+        this.convertToDTO = convertToDTO;
+
 
     }
 
-    public List<AlarmComments> getAlarms() {
-        return alarmCoomentsRepository.findAll();
-    }
 
-    public List<CreateFaultDTO> getRelatedAlarms(String token, String userId, String severity, String comment) throws IOException {
-        String query = QueryPropertyConfig.getProperties().getProperty("get.alarms");
-        List<Alarm> relatedAlarms = entityManager.createNativeQuery(query, "AlarmMapping").getResultList();
+
+    public List<CreateFaultDTO> createFJW(String token, String userId, String severity, String comment) throws IOException {
+
+        List<Alarm> relatedAlarms = entityManager.createNativeQuery(GET_ALARMS, "AlarmMapping").getResultList();
         CreateFaultDTO createFaultDTO = new CreateFaultDTO();
         List<CreateFaultDTO> createFaultDTOS = new ArrayList<>();
 
@@ -137,7 +148,11 @@ public class AlarmService {
                                     WorkOrderDetailDTO workOrderDetailDTO = new WorkOrderDetailDTO();
                                     workOrderDetailDTO.setPromNumber(createFaultDTO.getNumber());
                                     workOrderDetailDTO.setOrderType("CREATE");
-                                    workOrderDetailDTO.setWorkGroup(alarm.getWorkGroup());
+                                    if (alarm.getWorkOrder().equals("Province/FLM")) {
+                                        workOrderDetailDTO.setWorkGroup(map.get(getGroupLocation(alarm)) + "_FO_RAN");
+                                    } else {
+                                        workOrderDetailDTO.setWorkGroup(alarm.getWorkOrder());
+                                    }
                                     workOrderDetailDTO.setDescription("avasvsadvsdvsd");
 
                                     insertWorkOrder(token, workOrderDetailDTO, true, userId);
@@ -191,18 +206,7 @@ public class AlarmService {
         return actionResult;
     }
 
-    public ActionResult doAlarmAck(String token, String type, List<String> occurrenceIds, String severity, String comment) {
-        try {
-            String message = feignAlarmAction.doAlarmAck(token, type, occurrenceIds, severity, comment).getMessage();
-            ActionResult actionResult = new ActionResult(message);
-            return actionResult;
-        } catch (Exception ex) {
-            System.out.println(ex);
-        }
 
-        ActionResult actionResult = new ActionResult("completed but there is an unhandled exception");
-        return actionResult;
-    }
 
     public List<ProblemLinks> createFaultLinks(Long problemNumber, List<LinksDTO> links, String token, String userId) {
         return feignService.createFaultLinks(problemNumber, links, token, userId);
@@ -285,8 +289,7 @@ public class AlarmService {
 
     private Map<String, String> getMappedData(String query) {
 
-        List<TripleString> data = entityManager.createNativeQuery(query,
-                "DualStringMapping").getResultList();
+        List<TripleString> data = entityManager.createNativeQuery(query, "DualStringMapping").getResultList();
         return data.stream()
                 .filter(m -> !StringUtils.isEmpty(m.getFirstString()) && !StringUtils.isEmpty(m.getSecondString()))
                 .collect(toMap(TripleString::getFirstString, TripleString::getSecondString,
@@ -365,7 +368,7 @@ public class AlarmService {
         createFaultDTO.setReportedTime(alarm.getAlamReported());
         createFaultDTO.setReportedby("COMPLEX_ADMIN");
         createFaultDTO.setPriority(2L);
-        createFaultDTO.setDescription("this is a test. ");
+        createFaultDTO.setDescription("COMPLEX_ADMIN");
         createFaultDTO.setType(alarm.getType());
         createFaultDTO.setRegnCode(alarm.getAlamAreaCode());
         createFaultDTO.setEntity(entity(alarm.getCause()));
@@ -373,7 +376,8 @@ public class AlarmService {
         createFaultDTO.setLinks(createLink(alarm));
         createFaultDTO.setAttributes(extractAttributes(createTicketParams(alarm), alarm));
         createFaultDTO2 = createFaultWOA(token, createFaultDTO);
-        log.info("create fault   " + createFaultDTO2.getNumber());
+        log.info("Create Ticket  " + createFaultDTO2.getNumber());
+        log.info("Alarm OccurrenceId" + alarm.getAlasOccurrenceId());
         ProblemDTO problemDTO = convertToDTO.MapToProlemDto(createFaultDTO2, alarm);
         redisProblemService.redisMyProblemDTO(problemDTO);
         return createFaultDTO2;
@@ -526,12 +530,14 @@ public class AlarmService {
 
             for (ProblemDTO problemDTO : myProblemDTOS) {
                 if (problemService.checkStatus(problemDTO.getPROM_NUMBER()) != null) {
+                    log.info("***********************************************************************************");
                     log.info("START linked  problem My Redis");
                     log.info("Alarm occur" + alarm.getAlasOccurrenceId());
                     log.info("Number Problem " + problemDTO.getPROM_NUMBER());
                     createLink(alarm);
                     problemLinks = createFaultLinks(problemDTO.getPROM_NUMBER(), createLink(alarm), token, userId);
                     log.info("END linked  problem My Redis");
+                    log.info("***********************************************************************************");
                     break;
                 }
             }
@@ -565,12 +571,6 @@ public class AlarmService {
         List<ProblemDTO> filterProblem = new ArrayList<>();
 
         for (ProblemDTO problem : problemDTOS) {
-//            log.info("****************************************************************************************************");
-//            log.info("alarm type  :" + alarm.getAlamAlarmType());
-//            log.info("problemDTO :" + problem.getALAM_ALARMTYPE());
-//            log.info("value: " + problem.getPRAT_VALUE());
-//            log.info("getLocation: " + getLocation(alarm));
-//            log.info("getTechnologies:  " + getTechnologiesRegex(alarm));
             if (problem.getALAM_ALARMTYPE().equals(alarm.getAlamAlarmType())) {
                 if (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologies(alarm))) {
                     filterProblem.add(problem);
@@ -588,15 +588,6 @@ public class AlarmService {
         List<ProblemDTO> filterProblem = new ArrayList<>();
         if (problemDTOS != null) {
             for (ProblemDTO problem : problemDTOS) {
-
-//                log.info("***********************Start*****************************************");
-//                log.info("alarm type  :" + alarm.getAlamAlarmType());
-//                log.info("problemDTO :" + problem.getALAM_ALARMTYPE());
-//                log.info("value: " + problem.getPRAT_VALUE());
-//                log.info("getLocation: " + getLocation(alarm));
-//                log.info("getTechnologies:  " + getTechnologiesRegex(alarm));
-
-
                 if (problem.getALAM_ALARMTYPE().equals(alarm.getAlamAlarmType())) {
                     if (problem.getPRAT_VALUE().equals(getLocation(alarm)) || problem.getPRAT_VALUE().equals(getTechnologiesRegex(alarm))) {
                         filterProblem.add(problem);
@@ -640,6 +631,81 @@ public class AlarmService {
         }
 
         return null;
+    }
+
+    private void initWorkGroup() {
+        map=new HashMap<>();
+        map.put("KJ", "ALB");
+        map.put("AR", "ARD");
+        map.put("AG", "AZW");
+        map.put("BU", "BSH");
+        map.put("CH", "CHR");
+        map.put("FS", "FRS");
+        map.put("QM", "QOM");
+        map.put("GL", "GLN");
+        map.put("GN", "GOL");
+        map.put("HN", "HMD");
+        map.put("HZ", "HRM");
+        map.put("IL", "ILM");
+        map.put("ES", "ESF");
+        map.put("KS", "KRS");
+        map.put("KM", "KRM");
+        map.put("KH", "KHR");
+        map.put("KZ", "KHZ");
+        map.put("KB", "KBA");
+        map.put("LN", "LOR");
+        map.put("KD", "KRD");
+        map.put("MK", "MRK");
+        map.put("MA", "MZD");
+        map.put("NK", "KHN");
+        map.put("QN", "GZV");
+        map.put("SK", "KHS");
+        map.put("SM", "SEM");
+        map.put("SB", "SYS");
+        map.put("TH", "TEH");
+        map.put("YZ", "YZD");
+        map.put("ZN", "YZJ");
+    }
+
+    public String getGroupLocation(Alarm alarm) {
+
+        Pattern LocnPattern = Pattern.compile(".*([A-Z]{2})(\\d{4}).*");
+        if (alarm.getAlamLocnTtname() != null) {
+            Matcher matcherLocnTtname = LocnPattern.matcher(alarm.getAlamLocnTtname());
+            if (matcherLocnTtname.matches()) {
+                return matcherLocnTtname.group(1);
+//
+            }
+        }
+        if (alarm.getAlamEqupIndex() != null) {
+            Matcher matcherEqupIndex = LocnPattern.matcher(alarm.getAlamEqupIndex());
+            if (matcherEqupIndex.matches()) {
+                return matcherEqupIndex.group(1);
+            }
+        }
+        if (alarm.getAlamEventType() != null) {
+            Matcher matcherEventType = LocnPattern.matcher(alarm.getAlamEventType());
+            if (matcherEventType.matches()) {
+                return matcherEventType.group(1);
+            }
+
+        }
+        if (alarm.getAlasMessage() != null) {
+            Matcher matcherAlasMessage = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlasMessage.matches()) {
+                return matcherAlasMessage.group(1);
+            }
+        }
+        if (alarm.getAlamPort() != null) {
+            Matcher matcherAlamPost = LocnPattern.matcher(alarm.getAlasMessage());
+            if (matcherAlamPost.matches()) {
+                return matcherAlamPost.group(1);
+            }
+
+        }
+
+        return null;
+
     }
 
 

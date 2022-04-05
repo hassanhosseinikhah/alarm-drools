@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!--            <pattern>%d{HH:mm:ss.SSS} [%thread, %X{X-B3-TraceId:-},%X{X-B3-SpanId:-}] %-5level %logger{36} - %msg%n-->
+            <pattern>%d{HH:mm:ss.SSS} %.7thread %-5level %logger{36} : %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+<!--    <appender name="STASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">-->
+<!--        <destination>10.15.33.96:5000</destination>-->
+
+<!--        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">-->
+<!--            <providers>-->
+<!--                <pattern>-->
+<!--                    <pattern>{ "trace": "%mdc{X-B3-TraceId:-}" }</pattern>-->
+<!--                </pattern>-->
+<!--                <mdc>-->
+<!--                    <excludeMdcKeyName>X-B3-SpanId</excludeMdcKeyName>-->
+<!--                    <excludeMdcKeyName>X-B3-TraceId</excludeMdcKeyName>-->
+<!--                    <excludeMdcKeyName>X-B3-ParentSpanId</excludeMdcKeyName>-->
+<!--                    <excludeMdcKeyName>X-Span-Export</excludeMdcKeyName>-->
+<!--                </mdc>-->
+<!--                <context/>-->
+<!--                <logLevel>-->
+<!--                    <fieldName>info</fieldName>-->
+<!--                </logLevel>-->
+<!--                <loggerName/>-->
+<!--                <pattern>-->
+<!--                    <pattern>-->
+<!--                        {-->
+<!--                        "serviceName": "complex-auto-fault"-->
+<!--                        }-->
+<!--                    </pattern>-->
+<!--                </pattern>-->
+<!--                <threadName/>-->
+<!--                <message/>-->
+<!--                <logstashMarkers/>-->
+<!--                <stackHash>-->
+<!--                    <fieldName>exception-hash</fieldName>-->
+<!--                </stackHash>-->
+<!--                <stackTrace>-->
+<!--                    <fieldName>exception</fieldName>-->
+<!--                    <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">-->
+<!--                        <shortenedClassNameLength>20</shortenedClassNameLength>-->
+<!--                        <maxDepthPerThrowable>30</maxDepthPerThrowable>-->
+<!--                        <maxLength>2048</maxLength>-->
+<!--                        <rootCauseFirst>true</rootCauseFirst>-->
+<!--                        <exclude>sun\.reflect\..*\.invoke.*</exclude>-->
+<!--                    </throwableConverter>-->
+<!--                </stackTrace>-->
+<!--            </providers>-->
+<!--        </encoder>-->
+<!--    </appender>-->
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/COMPLEX_ADMIN.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/COMPLEX_ADMIN-%d{yyyy-MM-dd}-%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>100</maxHistory>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>
+                %d{MM-dd HH:mm:ss.SSS} %.7thread %-5level %logger{36} : %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+    <appender name="FILE_WE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <file>${LOG_PATH}/COMPLEX_ADMIN-ERROR.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/COMPLEX_ADMIN-WARN-ERROR-%d{yyyy-MM-dd}-%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>10</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>
+                %d{MM-dd HH:mm:ss.SSS} %.7thread %-5level %logger{36} : %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="FILE_WE"/>
+<!--        <appender-ref ref="STASH"/>-->
+    </root>
+</configuration>

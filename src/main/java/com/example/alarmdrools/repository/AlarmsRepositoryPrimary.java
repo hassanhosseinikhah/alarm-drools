@@ -1,4 +1,4 @@
-package com.example.alarmdrools.feign;
+package com.example.alarmdrools.repository;
 
 import com.example.alarmdrools.model.entity.Alarms;
 import org.springframework.data.jpa.repository.JpaRepository;

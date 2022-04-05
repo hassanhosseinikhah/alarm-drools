@@ -171,3 +171,27 @@ query:
         AND QUERY_PARAM_1
     ORDER BY
         s.alas_reported
+
+  FSM_GROUP_QUERY: >
+    SELECT mfwo_province c1 ,mfwo_workgroup c2 FROM mci_clarity.mci_fsm_workgroups
+
+  CONTRACTOR_QUERY: >
+    SELECT ma_location c1, upper(ma_flm_subcontractor) c2
+                FROM mci_clarity.mci_aras
+                WHERE REGEXP_LIKE ( ma_location, '^TH\\d{4}(-\\w)?$') and ma_flm_subcontractor is not null
+
+  AREA_QUERY: >
+    SELECT locn_ttname c1, area_code c2, area_area_code c3
+    FROM locations l, areas a
+    WHERE l.locn_area_code = a.area_code
+    AND REGEXP_LIKE ( locn_ttname, '^[A-Z]{2}\\d{4}$' )
+
+  GET_ALARMS: >
+    SELECT a.*, s.*, ar.area_code FROM alarms a, alarm_states s, areas ar, locations l
+    WHERE a.alam_id = s.alas_alam_id
+    AND s.alas_acknowledged IS NULL
+    AND s.alas_reported > sysdate -1/200
+    AND s.alas_reported > TO_DATE('2021/05/24 17:00:00', 'YYYY/MM/DD HH24:MI:SS')
+    AND a.alam_locn_ttname = l.locn_ttname
+    AND l.locn_area_code = ar.area_code  ORDER BY s.ALAS_REPORTED
+

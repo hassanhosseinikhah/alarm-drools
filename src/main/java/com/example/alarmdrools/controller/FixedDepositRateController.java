@@ -3,7 +3,6 @@ package com.example.alarmdrools.controller;
 import com.clarity.alarmaction.action.ActionResult;
 import com.example.alarmdrools.feign.FeignService;
 import com.example.alarmdrools.model.dto.*;
-import com.example.alarmdrools.model.entity.AlarmComments;
 import com.example.alarmdrools.service.AlarmService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -32,16 +31,13 @@ public class FixedDepositRateController {
 
 
 
-    @GetMapping("/alarms")
-    public List<AlarmComments> getActiveAlarms(){
-        return alarmService.getAlarms();
-    }
 
     @PostMapping("/related-alarms")
     public List<CreateFaultDTO> getRelatedAlarms(@RequestHeader(value = "Authorization") String token,
-                                                 @RequestParam(value = "userId", required = false) String userId, @RequestParam(value = "severity", required = false) String severity,
+                                                 @RequestParam(value = "userId", required = false) String userId,
+                                                 @RequestParam(value = "severity", required = false) String severity,
                                                  @RequestParam(value = "comment", required = false) String comment) throws IOException {
-        return alarmService.getRelatedAlarms(token,userId,severity,comment);
+        return alarmService.createFJW(token,userId,severity,comment);
     }
 
 
